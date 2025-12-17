@@ -1,0 +1,16 @@
+# Ignorar dependências do Node.js (Frontend e Backend)
+node_modules/
+*/node_modules/
+
+# Ignorar pastas de build (Produção)
+dist/
+build/
+
+# Ignorar variáveis de ambiente (SEGURANÇA: Nunca enviar isto!)
+.env
+.DS_Store
+
+# Ignorar restos de Python (caso tenham sobrado)
+venv/
+__pycache__/
+*.pyc
