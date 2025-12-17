@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./pages/Home";
 import Topics from "./pages/Topics";
-import Subtopics from "./pages/Subtopics"; // <--- Importante importar aqui
+import Subtopics from "./pages/Subtopics"; // <--- OBRIGATÓRIO TER ISSO
 import Quiz from "./pages/Quiz";
 
 function App() {
@@ -10,11 +10,8 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/topics" element={<Topics />} />
-
-        {/* Nova Rota para os Subtópicos */}
+        {/* ESSA ROTA É OBRIGATÓRIA PARA FUNCIONAR: */}
         <Route path="/topics/:topicId/subtopics" element={<Subtopics />} />
-
-        {/* Rota do Quiz (aceita subtopic ou topic) */}
         <Route path="/quiz/:mode/:id?" element={<Quiz />} />
       </Routes>
     </BrowserRouter>

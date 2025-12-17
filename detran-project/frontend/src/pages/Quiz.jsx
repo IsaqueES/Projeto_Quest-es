@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, ChevronRight, HelpCircle } from "lucide-react";
+import {
+  CheckCircle,
+  XCircle,
+  ChevronRight,
+  AlertTriangle,
+  Home,
+} from "lucide-react";
 import Sidebar from "../components/Sidebar";
 
 export default function Quiz() {
@@ -9,43 +15,64 @@ export default function Quiz() {
 
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedOption, setSelectedOption] = useState(null); // Índice da opção clicada
-  const [isSubmitted, setIsSubmitted] = useState(false); // Se já respondeu a questão atual
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
   const [stats, setStats] = useState({ correct: 0, wrong: 0 });
-  const [loading, setLoading] = useState(true);
 
-  // Usuário "dummy" para teste. Em produção usaria autenticação real.
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const userId = "aluno-teste-01";
 
-  // 1. Carregar Questões
   useEffect(() => {
     setLoading(true);
-    let url = `http://localhost:8000/questions?user_id=${userId}`;
+    setError(null);
 
+    // Constrói a URL
+    let url = `http://localhost:8000/questions?user_id=${userId}`;
     if (mode === "topic" && id) {
       url += `&topic_id=${id}`;
+    } else if (mode === "subtopic" && id) {
+      url += `&subtopic_id=${id}`;
     }
 
-    Promise.all([
-      fetch(url).then((res) => res.json()),
-      fetch(`http://localhost:8000/stats?user_id=${userId}`).then((res) =>
-        res.json()
-      ),
-    ])
-      .then(([qData, sData]) => {
-        setQuestions(qData);
-        setStats(sData);
+    console.log("Tentando buscar em:", url); // <--- OLHE O CONSOLE (F12)
+
+    // Faz a busca
+    fetch(url)
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Erro no servidor: ${res.status} - ${text}`);
+        }
+        return res.json();
+      })
+      .then((data) => {
+        console.log("Dados recebidos:", data); // <--- VEJA SE VEIO ARRAY []
+
+        if (Array.isArray(data)) {
+          setQuestions(data);
+          // Busca estatísticas apenas se carregou questões com sucesso
+          fetch(`http://localhost:8000/stats?user_id=${userId}`)
+            .then((r) => r.json())
+            .then((s) => setStats(s))
+            .catch((e) => console.warn("Erro ao buscar stats:", e));
+        } else {
+          throw new Error(
+            "O formato dos dados recebidos não é uma lista válida."
+          );
+        }
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Erro no fetch:", err);
+        console.error("Erro fatal:", err);
+        setError(err.message);
         setLoading(false);
       });
   }, [mode, id]);
 
-  // 2. Lógica ao clicar numa opção (Igual ao checkAnswer do HTML)
   const handleOptionClick = async (optionIndex) => {
-    if (isSubmitted) return; // Bloqueia se já respondeu
+    if (isSubmitted) return;
 
     setSelectedOption(optionIndex);
     setIsSubmitted(true);
@@ -53,7 +80,7 @@ export default function Quiz() {
     const currentQ = questions[currentIndex];
     const isCorrect = optionIndex === currentQ.correct_option;
 
-    // Salva no Backend
+    // Tenta salvar sem travar o app se falhar
     try {
       await fetch("http://localhost:8000/submit", {
         method: "POST",
@@ -64,33 +91,58 @@ export default function Quiz() {
           is_correct: isCorrect,
         }),
       });
-
-      // Atualiza placar local
       setStats((prev) => ({
         correct: isCorrect ? prev.correct + 1 : prev.correct,
         wrong: !isCorrect ? prev.wrong + 1 : prev.wrong,
       }));
-    } catch (error) {
-      console.error("Erro ao salvar resposta:", error);
+    } catch (e) {
+      console.error("Erro ao salvar progresso:", e);
     }
   };
 
-  // 3. Ir para próxima questão
   const handleNext = () => {
     setSelectedOption(null);
     setIsSubmitted(false);
     if (currentIndex < questions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
     } else {
-      alert("Módulo finalizado! Voltando para o menu.");
+      alert("Finalizado!");
       navigate("/");
     }
   };
 
+  // --- RENDERS DE ESTADO (Para não dar tela branca) ---
+
   if (loading)
     return (
-      <div className="flex h-screen items-center justify-center text-[var(--primary-color)] font-bold text-xl">
-        Carregando banco de questões...
+      <div className="flex min-h-screen bg-[var(--bg-color)] items-center justify-center">
+        <div className="text-xl font-bold text-gray-500 animate-pulse">
+          Carregando questões...
+        </div>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="flex min-h-screen bg-[var(--bg-color)] items-center justify-center p-8">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-lg border-l-4 border-red-500">
+          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Ops! Ocorreu um erro.
+          </h2>
+          <p className="text-gray-600 mb-6 bg-gray-100 p-2 rounded text-sm font-mono">
+            {error}
+          </p>
+          <div className="text-sm text-gray-500 mb-4">
+            Dica: Verifique se o terminal do backend está rodando sem erros.
+          </div>
+          <button
+            onClick={() => navigate("/")}
+            className="bg-blue-600 text-white px-6 py-2 rounded font-bold"
+          >
+            Voltar ao Início
+          </button>
+        </div>
       </div>
     );
 
@@ -100,32 +152,41 @@ export default function Quiz() {
         <Sidebar />
         <div className="flex-1 md:ml-64 p-8 flex flex-col items-center justify-center">
           <div className="bg-white p-10 rounded-xl shadow-lg text-center max-w-lg">
-            <CheckCircle className="w-20 h-20 text-[var(--success-color)] mx-auto mb-6" />
-            <h2 className="text-2xl font-bold text-[var(--primary-color)] mb-4">
-              Parabéns!
+            <CheckCircle className="w-20 h-20 text-blue-300 mx-auto mb-6" />
+            <h2 className="text-2xl font-bold text-gray-700 mb-4">
+              Nenhuma questão encontrada
             </h2>
-            <p className="text-gray-600 mb-8 text-lg">
-              Você zerou as questões disponíveis neste tema.
+            <p className="text-gray-600 mb-8">
+              Não encontramos questões para este tópico no banco de dados.
+              <br />
+              <br />
+              <span className="text-sm bg-yellow-100 p-1 rounded text-yellow-800">
+                Dica: Você rodou o script "npm run import" no backend?
+              </span>
             </p>
             <button
               onClick={() => navigate("/topics")}
-              className="btn-primary w-full"
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold"
             >
-              Voltar aos Temas
+              Voltar
             </button>
           </div>
         </div>
       </div>
     );
 
+  // Se chegou aqui, temos questões! Renderiza a prova.
   const question = questions[currentIndex];
+  // Proteção extra caso a questão esteja vazia
+  if (!question) return <div>Erro ao carregar índice {currentIndex}</div>;
+
   const isCorrect = selectedOption === question.correct_option;
 
   return (
     <div className="flex min-h-screen bg-[var(--bg-color)]">
       <Sidebar />
       <main className="flex-1 md:ml-64 p-4 md:p-8 flex flex-col h-screen overflow-hidden">
-        {/* Header Superior (Placar) */}
+        {/* Header */}
         <header className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border-b-2 border-gray-100">
           <div>
             <h2 className="text-lg font-bold text-[var(--primary-color)]">
@@ -135,145 +196,82 @@ export default function Quiz() {
               </span>
             </h2>
           </div>
-
           <div className="flex gap-4 text-sm font-bold">
-            <div className="flex items-center gap-2 text-[var(--success-color)] bg-green-50 px-3 py-1.5 rounded-lg border border-green-100">
-              <CheckCircle size={18} /> {stats.correct} Acertos
-            </div>
-            <div className="flex items-center gap-2 text-[var(--error-color)] bg-red-50 px-3 py-1.5 rounded-lg border border-red-100">
-              <XCircle size={18} /> {stats.wrong} Erros
-            </div>
+            <span className="text-green-600 bg-green-50 px-3 py-1 rounded">
+              ✓ {stats.correct}
+            </span>
+            <span className="text-red-500 bg-red-50 px-3 py-1 rounded">
+              ✕ {stats.wrong}
+            </span>
           </div>
         </header>
 
-        {/* Container Principal da Questão */}
+        {/* Questão */}
         <div className="flex-1 overflow-y-auto pb-24">
-          <div className="card-container mx-auto p-8 md:p-12 relative">
-            {/* Texto da Pergunta */}
-            <h3 className="text-xl md:text-2xl font-semibold text-[var(--primary-color)] leading-relaxed mb-8">
+          <div className="bg-white w-full max-w-[950px] mx-auto rounded-xl shadow-sm p-8 md:p-12">
+            <h3 className="text-xl md:text-2xl font-semibold text-gray-800 mb-8 leading-relaxed">
               {question.question_text}
             </h3>
 
-            {/* Se houver imagem (placeholder, caso seu banco tenha url de imagem futuramente) */}
-            {/* {question.image_url && <img src={question.image_url} alt="Ilustração" className="mb-6 max-w-full h-auto rounded-lg border" />} */}
-
-            {/* Lista de Opções */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {question.options.map((opt, idx) => {
-                let btnClass = "option-btn ";
-                let circleClass =
-                  "w-8 h-8 rounded-full border-2 flex items-center justify-center mr-4 text-sm font-bold transition-colors ";
-
+                // Lógica de cores
+                let style =
+                  "w-full text-left p-4 rounded-lg border-2 flex items-center transition-all ";
                 if (isSubmitted) {
-                  // Se já respondeu, revela as cores
-                  if (idx === question.correct_option) {
-                    btnClass += "option-correct"; // Correta fica verde
-                    circleClass +=
-                      "border-[var(--success-color)] bg-[var(--success-color)] text-white";
-                  } else if (idx === selectedOption) {
-                    btnClass += "option-incorrect"; // Errada selecionada fica vermelha
-                    circleClass +=
-                      "border-[var(--error-color)] bg-[var(--error-color)] text-white";
-                  } else {
-                    btnClass += "opacity-50 grayscale"; // As outras ficam apagadas
-                    circleClass += "border-gray-300 text-gray-400";
-                  }
+                  if (idx === question.correct_option)
+                    style +=
+                      "border-green-500 bg-green-50 text-green-700 font-bold";
+                  else if (idx === selectedOption)
+                    style += "border-red-500 bg-red-50 text-red-700 font-bold";
+                  else style += "border-gray-100 text-gray-400 opacity-60";
                 } else {
-                  // Estado normal antes de responder
-                  btnClass +=
-                    "hover:border-[var(--accent-color)] hover:shadow-sm cursor-pointer";
-                  circleClass +=
-                    "border-gray-300 text-gray-500 group-hover:border-[var(--accent-color)] group-hover:text-[var(--accent-color)]";
+                  style +=
+                    "border-gray-200 hover:border-blue-400 hover:bg-blue-50 cursor-pointer text-gray-700";
                 }
-
-                const letters = ["A", "B", "C", "D", "E"];
 
                 return (
                   <button
                     key={idx}
                     onClick={() => handleOptionClick(idx)}
                     disabled={isSubmitted}
-                    className={btnClass}
+                    className={style}
                   >
-                    <div className={circleClass}>{letters[idx]}</div>
-                    <span className="font-medium text-lg text-gray-700 flex-1">
-                      {opt}
+                    <span className="w-8 h-8 rounded-full border flex items-center justify-center mr-4 bg-white text-xs font-bold shrink-0">
+                      {["A", "B", "C", "D", "E"][idx]}
                     </span>
-
-                    {/* Ícones de status na direita */}
-                    {isSubmitted && idx === question.correct_option && (
-                      <CheckCircle className="text-[var(--success-color)] ml-2" />
-                    )}
-                    {isSubmitted &&
-                      idx === selectedOption &&
-                      idx !== question.correct_option && (
-                        <XCircle className="text-[var(--error-color)] ml-2" />
-                      )}
+                    {opt}
                   </button>
                 );
               })}
             </div>
 
-            {/* Área de Feedback (Explicação) - Só aparece depois de responder */}
             {isSubmitted && (
               <div
-                className={`mt-8 p-6 rounded-lg border-l-4 animate-fade-in ${
+                className={`mt-8 p-6 rounded border-l-4 ${
                   isCorrect
-                    ? "bg-green-50 border-[var(--success-color)]"
-                    : "bg-red-50 border-[var(--error-color)]"
+                    ? "bg-green-50 border-green-500"
+                    : "bg-red-50 border-red-500"
                 }`}
               >
-                <div className="flex gap-3 mb-2">
-                  {isCorrect ? (
-                    <CheckCircle className="text-[var(--success-color)]" />
-                  ) : (
-                    <HelpCircle className="text-[var(--error-color)]" />
-                  )}
-                  <h4
-                    className={`font-bold text-lg ${
-                      isCorrect
-                        ? "text-[var(--success-color)]"
-                        : "text-[var(--error-color)]"
-                    }`}
-                  >
-                    {isCorrect
-                      ? "Correto! Muito bem."
-                      : "Atenção! Resposta Incorreta."}
-                  </h4>
-                </div>
-
-                <p className="text-gray-700 leading-relaxed pl-9">
-                  {question.explanation ||
-                    "Confira o gabarito oficial para mais detalhes."}
-                </p>
-
-                {!isCorrect && (
-                  <div className="mt-4 ml-9 bg-white p-4 rounded border border-gray-200 text-sm text-gray-600 shadow-sm">
-                    <strong className="text-[var(--error-color)] uppercase text-xs tracking-wide block mb-1">
-                      Dica de Ouro:
-                    </strong>
-                    {question.trick_tip ||
-                      "Leia o enunciado com atenção às palavras 'NÃO', 'EXCETO' ou 'INCORRETO'."}
-                  </div>
-                )}
+                <h4 className="font-bold text-lg mb-2">
+                  {isCorrect ? "Correto!" : "Incorreto!"}
+                </h4>
+                <p className="text-gray-700">{question.explanation}</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Barra de Navegação Inferior (Botão Próximo) */}
-        <div className="fixed bottom-0 md:left-64 left-0 right-0 p-4 bg-white border-t border-gray-200 flex justify-center md:justify-end z-20 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]">
-          {isSubmitted ? (
+        {/* Footer */}
+        <div className="fixed bottom-0 md:left-64 left-0 right-0 p-4 bg-white border-t flex justify-end z-20">
+          {isSubmitted && (
             <button
               onClick={handleNext}
-              className="btn-primary flex items-center gap-2 text-lg px-8 animate-pulse-slow"
+              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 flex items-center gap-2"
             >
-              Próxima Questão <ChevronRight size={24} />
+              Próxima <ChevronRight size={20} />
             </button>
-          ) : (
-            <div className="text-gray-400 text-sm italic py-3">
-              Selecione uma alternativa para continuar
-            </div>
           )}
         </div>
       </main>

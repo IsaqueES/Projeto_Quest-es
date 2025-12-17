@@ -1,25 +1,40 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ChevronRight, ArrowLeft, BookOpen } from "lucide-react";
+import { ChevronRight, ArrowLeft, BookOpen, AlertTriangle } from "lucide-react";
 import Sidebar from "../components/Sidebar";
 
 export default function Subtopics() {
   const { topicId } = useParams();
   const [subtopics, setSubtopics] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     setLoading(true);
-    // Busca os subtópicos do tema específico
+    // Verifica se topicId existe para evitar chamadas inválidas
+    if (!topicId) return;
+
     fetch(`http://localhost:8000/topics/${topicId}/subtopics`)
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Falha ao conectar com o servidor");
+        return res.json();
+      })
       .then((data) => {
-        setSubtopics(data);
+        // Proteção: Garante que data é um array. Se não for, define vazio.
+        if (Array.isArray(data)) {
+          setSubtopics(data);
+        } else {
+          console.error("Formato de dados inválido:", data);
+          setSubtopics([]);
+        }
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Erro:", err);
+        console.error("Erro ao buscar subtópicos:", err);
+        setError(
+          "Não foi possível carregar os conteúdos. Verifique se o backend está rodando."
+        );
         setLoading(false);
       });
   }, [topicId]);
@@ -44,8 +59,18 @@ export default function Subtopics() {
             Selecione um tópico específico para focar seus estudos.
           </p>
 
+          {/* Tratamento de Erro Visual */}
+          {error && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6 flex items-center gap-3">
+              <AlertTriangle />
+              {error}
+            </div>
+          )}
+
           {loading ? (
-            <div className="text-center py-10">Carregando subtópicos...</div>
+            <div className="text-center py-10 text-gray-500">
+              Carregando subtópicos...
+            </div>
           ) : (
             <div className="grid gap-4">
               {subtopics.length > 0 ? (
@@ -69,14 +94,14 @@ export default function Subtopics() {
                 ))
               ) : (
                 <div className="text-center p-10 bg-white rounded-xl shadow-sm">
-                  <p className="text-gray-500">
+                  <p className="text-gray-500 mb-4">
                     Nenhum subtópico encontrado para este tema.
                   </p>
                   <button
                     onClick={() => navigate(`/quiz/topic/${topicId}`)}
-                    className="mt-4 text-[var(--accent-color)] font-bold hover:underline"
+                    className="bg-[var(--accent-color)] text-white px-6 py-2 rounded-lg font-bold hover:brightness-90 transition-all"
                   >
-                    Fazer simulado geral deste tema
+                    Fazer Simulado Geral deste Tema
                   </button>
                 </div>
               )}
