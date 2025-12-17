@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ChevronRight, ArrowLeft, BookOpen, AlertTriangle } from "lucide-react";
 import Sidebar from "../components/Sidebar";
-
+// ...
+const handleSubtopicClick = (subtopicId) => {
+  navigate(`/questions?subtopic_id=${subtopicId}`); // Ou a rota que o Quiz usa
+};
 export default function Subtopics() {
   const { topicId } = useParams();
   const [subtopics, setSubtopics] = useState([]);

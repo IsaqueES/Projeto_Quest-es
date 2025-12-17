@@ -13,14 +13,12 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Middlewares
 app.use(cors());
 app.use(express.json());
 
 // Rota 1: Pegar os Temas
 app.get("/topics", async (req, res) => {
   const { data, error } = await supabase.from("topics").select("*").order("id");
-
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -28,16 +26,18 @@ app.get("/topics", async (req, res) => {
 // Rota 2: Pegar Subtópicos de um Tema
 app.get("/topics/:topicId/subtopics", async (req, res) => {
   const { topicId } = req.params;
+  // Busca subtópicos onde o topic_id bate com o solicitado
   const { data, error } = await supabase
     .from("subtopics")
     .select("*")
-    .eq("topic_id", topicId);
+    .eq("topic_id", topicId)
+    .order("id"); // Adicionado ordem para ficar bonitinho
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// Rota 3: Pegar Questões (Com filtro de "não repetir")
+// Rota 3: Pegar Questões (CORRIGIDA)
 app.get("/questions", async (req, res) => {
   const { user_id, topic_id, subtopic_id } = req.query;
 
@@ -45,13 +45,16 @@ app.get("/questions", async (req, res) => {
 
   try {
     // 1. Buscar IDs das questões que o usuário já ACERTOU
-    const { data: progress } = await supabase
+    const { data: progress, error: progressError } = await supabase
       .from("user_progress")
       .select("question_id")
       .eq("user_id", user_id)
       .eq("is_correct", true);
 
-    const answeredIds = progress.map((p) => p.question_id);
+    if (progressError) throw progressError;
+
+    // AQUI ESTAVA O ERRO: Se progress for null, usa array vazio []
+    const answeredIds = (progress || []).map((p) => p.question_id);
 
     // 2. Montar query das questões
     let query = supabase.from("questions").select("*");
@@ -64,8 +67,6 @@ app.get("/questions", async (req, res) => {
 
     // Se já respondeu algumas, exclua elas da busca
     if (answeredIds.length > 0) {
-      // Nota: O Supabase tem limite de URL, se tiver 1000 IDs pode falhar.
-      // Para produção real usariamos uma 'Stored Procedure', mas para este projeto serve.
       query = query.not("id", "in", `(${answeredIds.join(",")})`);
     }
 
@@ -75,6 +76,7 @@ app.get("/questions", async (req, res) => {
 
     res.json(questions);
   } catch (err) {
+    console.error("Erro ao buscar questões:", err); // Log para ajudar no debug
     res.status(500).json({ error: err.message });
   }
 });
@@ -98,8 +100,10 @@ app.get("/stats", async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const correct = data.filter((d) => d.is_correct).length;
-  const wrong = data.filter((d) => !d.is_correct).length;
+  // Proteção contra data null
+  const safeData = data || [];
+  const correct = safeData.filter((d) => d.is_correct).length;
+  const wrong = safeData.filter((d) => !d.is_correct).length;
 
   res.json({ correct, wrong });
 });
@@ -116,7 +120,6 @@ app.post("/submit", async (req, res) => {
   res.json({ status: "success" });
 });
 
-// Iniciar Servidor
 app.listen(PORT, () => {
   console.log(`✅ Servidor rodando em http://localhost:${PORT}`);
 });

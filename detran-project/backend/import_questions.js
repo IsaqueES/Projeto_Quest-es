@@ -1,7 +1,7 @@
 import fs from "fs";
-import * as cheerio from "cheerio";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import vm from "vm";
 
 dotenv.config();
 
@@ -9,97 +9,280 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_KEY
 );
+
 const HTML_FILE = "aa_660_final2.html";
+
+// Mapeamento baseado no seu schema.sql
+// Certifique-se que os IDs batem com a ordem de inserção no banco
+const SUBTOPIC_RULES = [
+  // TEMA 1: Legislação
+  {
+    id: 1,
+    topic_id: 1,
+    keywords: [
+      "placa",
+      "sinalização",
+      "faixa",
+      "cor",
+      "silvo",
+      "apito",
+      "gesto",
+      "luminoso",
+      "horizontal",
+      "vertical",
+    ],
+  }, // Sinalização
+  {
+    id: 2,
+    topic_id: 1,
+    keywords: [
+      "infração",
+      "penalidade",
+      "multa",
+      "apreensão",
+      "cassação",
+      "suspensão",
+      "crime",
+      "pontos",
+      "recurso",
+    ],
+  }, // Infrações
+  {
+    id: 3,
+    topic_id: 1,
+    keywords: [
+      "habilitação",
+      "cnh",
+      "ppd",
+      "acc",
+      "categoria",
+      "renovação",
+      "exame",
+      "psicológico",
+    ],
+  }, // Habilitação
+
+  // TEMA 2: Direção Defensiva
+  {
+    id: 4,
+    topic_id: 2,
+    keywords: [
+      "chuva",
+      "neblina",
+      "aquaplanagem",
+      "noite",
+      "luz",
+      "ofuscamento",
+      "condição adversa",
+      "tempo",
+      "via",
+      "granizo",
+    ],
+  }, // Condições Adversas
+  {
+    id: 5,
+    topic_id: 2,
+    keywords: [
+      "colisão",
+      "distância",
+      "seguimento",
+      "frente",
+      "traseira",
+      "misteriosa",
+      "batida",
+      "abalroamento",
+    ],
+  }, // Colisão
+  {
+    id: 6,
+    topic_id: 2,
+    keywords: ["cinto", "capacete", "segurança", "bebê", "cadeirinha"],
+  }, // Cinto/Segurança
+
+  // TEMA 3: Mecânica
+  {
+    id: 7,
+    topic_id: 3,
+    keywords: [
+      "motor",
+      "radiador",
+      "óleo",
+      "lubrificação",
+      "arrefecimento",
+      "água",
+      "bateria",
+      "carburador",
+      "injeção",
+      "filtro",
+    ],
+  }, // Motor
+  {
+    id: 8,
+    topic_id: 3,
+    keywords: [
+      "painel",
+      "instrumento",
+      "velocímetro",
+      "termômetro",
+      "luz indicadora",
+      "odômetro",
+    ],
+  }, // Painel
+
+  // TEMA 4: Primeiros Socorros
+  {
+    id: 9,
+    topic_id: 4,
+    keywords: [
+      "sinais vitais",
+      "avaliação",
+      "respiração",
+      "pulso",
+      "consciência",
+      "desmaio",
+      "convulsão",
+    ],
+  }, // Avaliação Inicial
+  {
+    id: 10,
+    topic_id: 4,
+    keywords: [
+      "hemorragia",
+      "sangue",
+      "sangramento",
+      "fratura",
+      "queimadura",
+      "imobilização",
+    ],
+  }, // Hemorragias/Fraturas
+
+  // TEMA 5: Meio Ambiente
+  {
+    id: 11,
+    topic_id: 5,
+    keywords: [
+      "poluição",
+      "gases",
+      "sonora",
+      "ruído",
+      "catalisador",
+      "escapamento",
+      "lixo",
+      "ambiental",
+    ],
+  }, // Poluição
+
+  // TEMA 6: Cidadania
+  {
+    id: 12,
+    topic_id: 6,
+    keywords: [
+      "cidadania",
+      "convívio",
+      "social",
+      "comportamento",
+      "solidariedade",
+      "cortesia",
+      "idoso",
+      "deficiente",
+    ],
+  }, // Convívio
+];
 
 async function importQuestions() {
   console.log(`📖 Lendo arquivo ${HTML_FILE}...`);
 
   if (!fs.existsSync(HTML_FILE)) {
-    console.error("❌ Arquivo HTML não encontrado na pasta backend!");
+    console.error("❌ Arquivo não encontrado!");
     return;
   }
 
   const htmlContent = fs.readFileSync(HTML_FILE, "utf-8");
-  // Carrega o HTML no Cheerio (similar ao jQuery)
-  const $ = cheerio.load(htmlContent);
 
-  // Extrai todo o texto para processar via Regex, pois a estrutura HTML de simulados
-  // costuma ser visual e não semântica
-  const textContent = $("body").text();
-  const lines = textContent
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l);
+  // Extrai JS do HTML (Mesma lógica segura da versão anterior)
+  const scriptMatch = htmlContent.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+  if (!scriptMatch) return;
 
-  const questionsBuffer = [];
-  let currentQ = null;
-
-  // Regex para identificar padrões
-  const questionPattern = /^\s*(\d+)[).—-]\s*(.+)/; // Ex: "1) Texto" ou "01. Texto"
-  const optionPattern = /^\s*([a-dA-D])[).—-]\s*(.+)/; // Ex: "a) Opção"
-
-  for (const line of lines) {
-    // É uma nova pergunta?
-    const qMatch = line.match(questionPattern);
-    if (qMatch) {
-      if (currentQ) questionsBuffer.push(currentQ);
-
-      currentQ = {
-        text: qMatch[2],
-        options: [],
-        correctIndex: 0, // Padrão
-      };
-      continue;
-    }
-
-    // É uma opção?
-    const optMatch = line.match(optionPattern);
-    if (currentQ && optMatch) {
-      currentQ.options.push(optMatch[2]);
-
-      // Tenta achar resposta certa se tiver '*' ou '(x)'
-      if (line.includes("*") || line.toLowerCase().includes("(x)")) {
-        currentQ.correctIndex = currentQ.options.length - 1;
-      }
-      continue;
-    }
-
-    // Continuação do texto da pergunta
-    if (currentQ && currentQ.options.length === 0) {
-      currentQ.text += " " + line;
-    }
+  let scriptContent = scriptMatch[1];
+  if (scriptContent.includes("const quizArea")) {
+    scriptContent = scriptContent.split("const quizArea")[0];
   }
-  if (currentQ) questionsBuffer.push(currentQ);
+  scriptContent += `
+    this.baseQuestions = baseQuestions;
+    this.signImages = signImages;
+  `;
 
-  console.log(`🧩 Encontradas ${questionsBuffer.length} questões potenciais.`);
+  const sandbox = {};
+  vm.createContext(sandbox);
+  try {
+    vm.runInContext(scriptContent, sandbox);
+  } catch (e) {
+    console.error("❌ Erro JS:", e.message);
+    return;
+  }
 
-  // Inserção no Banco
+  const questionsRaw = sandbox.baseQuestions || [];
+  const imagesMap = sandbox.signImages || {};
+
+  console.log(`🧩 Processando ${questionsRaw.length} questões com Subtemas...`);
+
   let count = 0;
-  for (const q of questionsBuffer) {
-    if (q.options.length < 2) continue; // Pula inválidas
 
-    // Preenche até ter 4 opções para não quebrar layout
-    while (q.options.length < 4) q.options.push("-");
+  for (const q of questionsRaw) {
+    const text = q.text.toLowerCase();
+
+    // Lógica Inteligente: Define Tópico e Subtópico baseado no texto
+    let topicId = 1; // Default: Legislação
+    let subtopicId = null; // Default: null
+
+    // Tenta encontrar um subtema que bata com as palavras-chave
+    for (const rule of SUBTOPIC_RULES) {
+      const match = rule.keywords.some((k) => text.includes(k));
+      if (match) {
+        topicId = rule.topic_id;
+        subtopicId = rule.id;
+        break; // Achou o primeiro match, para.
+      }
+    }
+
+    // Se não achou subtema, mas é de um tema geral, ajusta o tema principal
+    if (!subtopicId) {
+      if (text.includes("defensiva")) topicId = 2;
+      else if (text.includes("mecânica")) topicId = 3;
+      else if (text.includes("socorros")) topicId = 4;
+      else if (text.includes("ambiente")) topicId = 5;
+      else if (text.includes("cidadania")) topicId = 6;
+    }
+
+    // Recupera Imagem
+    let imageUrl = null;
+    if (q.code) {
+      const codes = q.code.split(",").map((c) => c.trim());
+      for (const code of codes) {
+        if (imagesMap[code]) {
+          imageUrl = imagesMap[code];
+          break;
+        }
+      }
+    }
 
     const { error } = await supabase.from("questions").insert({
-      topic_id: 1, // Padrão: Legislação (Depois você muda no banco)
-      subtopic_id: null,
-      question_text: q.text.substring(0, 500),
-      options: q.options.slice(0, 4),
-      correct_option: q.correctIndex,
-      explanation: "Resposta baseada no gabarito oficial.",
-      trick_tip: "Leia com atenção.",
+      topic_id: topicId,
+      subtopic_id: subtopicId, // AGORA ESTAMOS PREENCHENDO ISSO!
+      question_text: q.text,
+      options: q.options,
+      correct_option: q.answer,
+      explanation: "Gabarito Oficial.",
+      image_url: imageUrl,
     });
 
     if (!error) {
       count++;
-      if (count % 50 === 0) console.log(`Importadas ${count}...`);
-    } else {
-      console.error("Erro ao inserir:", error.message);
+      if (count % 50 === 0) process.stdout.write(`.`);
     }
   }
 
-  console.log(`✅ Sucesso! ${count} questões importadas.`);
+  console.log(`\n✅ Sucesso! ${count} questões importadas e categorizadas.`);
 }
 
 importQuestions();

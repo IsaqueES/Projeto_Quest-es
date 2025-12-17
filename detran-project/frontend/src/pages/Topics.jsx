@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+// ...
+import { useNavigate } from "react-router-dom";
+
+// ...
+const handleTopicClick = (topicId) => {
+  // ESTAVA ASSIM (ERRADO): navigate(`/quiz?topic_id=${topicId}`);
+  // TEM QUE SER ASSIM (CORRETO):
+  navigate(`/topics/${topicId}/subtopics`);
+};
 
 export default function Topics() {
   const [topics, setTopics] = useState([]);
