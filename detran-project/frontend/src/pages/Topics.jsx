@@ -1,22 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-// ...
-import { useNavigate } from "react-router-dom";
-
-// ...
-const handleTopicClick = (topicId) => {
-  // ESTAVA ASSIM (ERRADO): navigate(`/quiz?topic_id=${topicId}`);
-  // TEM QUE SER ASSIM (CORRETO):
-  navigate(`/topics/${topicId}/subtopics`);
-};
 
 export default function Topics() {
   const [topics, setTopics] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Busca os temas do backend
     fetch("http://localhost:8000/topics")
       .then((res) => res.json())
       .then((data) => setTopics(data))
@@ -42,7 +32,9 @@ export default function Topics() {
             {topics.map((topic) => (
               <div
                 key={topic.id}
-                onClick={() => navigate(`/quiz/topic/${topic.id}`)}
+                // CORREÇÃO AQUI: Mudamos de '/quiz/topic/...' para '/topics/...'
+                // Isso leva para a página de Subtópicos em vez de iniciar o quiz direto.
+                onClick={() => navigate(`/topics/${topic.id}`)}
                 className="bg-white p-6 rounded-xl shadow-sm hover:shadow-lg transition-all cursor-pointer border-l-4 border-[var(--accent-color)] flex flex-col items-center text-center group"
               >
                 <div className="text-4xl mb-4 grayscale group-hover:grayscale-0 transition-all duration-300">
@@ -52,7 +44,7 @@ export default function Topics() {
                   {topic.name}
                 </h3>
                 <span className="text-xs font-bold text-[var(--accent-color)] mt-3 bg-blue-50 px-3 py-1 rounded-full group-hover:bg-[var(--accent-color)] group-hover:text-white transition-colors">
-                  INICIAR
+                  VER TÓPICOS
                 </span>
               </div>
             ))}

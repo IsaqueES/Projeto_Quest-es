@@ -12,8 +12,7 @@ const supabase = createClient(
 
 const HTML_FILE = "aa_660_final2.html";
 
-// Mapeamento baseado no seu schema.sql
-// Certifique-se que os IDs batem com a ordem de inserção no banco
+// Regras para categorizar automaticamente nos subtemas (IDs baseados no seu schema.sql)
 const SUBTOPIC_RULES = [
   // TEMA 1: Legislação
   {
@@ -23,15 +22,13 @@ const SUBTOPIC_RULES = [
       "placa",
       "sinalização",
       "faixa",
-      "cor",
       "silvo",
       "apito",
-      "gesto",
       "luminoso",
       "horizontal",
       "vertical",
     ],
-  }, // Sinalização
+  },
   {
     id: 2,
     topic_id: 1,
@@ -44,9 +41,8 @@ const SUBTOPIC_RULES = [
       "suspensão",
       "crime",
       "pontos",
-      "recurso",
     ],
-  }, // Infrações
+  },
   {
     id: 3,
     topic_id: 1,
@@ -56,11 +52,10 @@ const SUBTOPIC_RULES = [
       "ppd",
       "acc",
       "categoria",
-      "renovação",
       "exame",
-      "psicológico",
+      "renovação",
     ],
-  }, // Habilitação
+  },
 
   // TEMA 2: Direção Defensiva
   {
@@ -70,34 +65,23 @@ const SUBTOPIC_RULES = [
       "chuva",
       "neblina",
       "aquaplanagem",
-      "noite",
-      "luz",
       "ofuscamento",
       "condição adversa",
       "tempo",
       "via",
-      "granizo",
+      "luz",
     ],
-  }, // Condições Adversas
+  },
   {
     id: 5,
     topic_id: 2,
-    keywords: [
-      "colisão",
-      "distância",
-      "seguimento",
-      "frente",
-      "traseira",
-      "misteriosa",
-      "batida",
-      "abalroamento",
-    ],
-  }, // Colisão
+    keywords: ["colisão", "distância", "seguimento", "batida", "impacto"],
+  },
   {
     id: 6,
     topic_id: 2,
-    keywords: ["cinto", "capacete", "segurança", "bebê", "cadeirinha"],
-  }, // Cinto/Segurança
+    keywords: ["cinto", "capacete", "segurança", "cadeirinha", "bebê"],
+  },
 
   // TEMA 3: Mecânica
   {
@@ -107,27 +91,19 @@ const SUBTOPIC_RULES = [
       "motor",
       "radiador",
       "óleo",
-      "lubrificação",
-      "arrefecimento",
-      "água",
       "bateria",
       "carburador",
       "injeção",
       "filtro",
+      "freio",
+      "pneu",
     ],
-  }, // Motor
+  },
   {
     id: 8,
     topic_id: 3,
-    keywords: [
-      "painel",
-      "instrumento",
-      "velocímetro",
-      "termômetro",
-      "luz indicadora",
-      "odômetro",
-    ],
-  }, // Painel
+    keywords: ["painel", "velocímetro", "termômetro", "luz indicadora"],
+  },
 
   // TEMA 4: Primeiros Socorros
   {
@@ -135,26 +111,23 @@ const SUBTOPIC_RULES = [
     topic_id: 4,
     keywords: [
       "sinais vitais",
-      "avaliação",
       "respiração",
       "pulso",
-      "consciência",
       "desmaio",
-      "convulsão",
+      "consciência",
     ],
-  }, // Avaliação Inicial
+  },
   {
     id: 10,
     topic_id: 4,
     keywords: [
       "hemorragia",
-      "sangue",
       "sangramento",
       "fratura",
       "queimadura",
       "imobilização",
     ],
-  }, // Hemorragias/Fraturas
+  },
 
   // TEMA 5: Meio Ambiente
   {
@@ -167,46 +140,46 @@ const SUBTOPIC_RULES = [
       "ruído",
       "catalisador",
       "escapamento",
-      "lixo",
-      "ambiental",
+      "fumaça",
     ],
-  }, // Poluição
+  },
 
   // TEMA 6: Cidadania
   {
     id: 12,
     topic_id: 6,
-    keywords: [
-      "cidadania",
-      "convívio",
-      "social",
-      "comportamento",
-      "solidariedade",
-      "cortesia",
-      "idoso",
-      "deficiente",
-    ],
-  }, // Convívio
+    keywords: ["cidadania", "convívio", "social", "cortesia", "solidariedade"],
+  },
 ];
 
 async function importQuestions() {
   console.log(`📖 Lendo arquivo ${HTML_FILE}...`);
 
   if (!fs.existsSync(HTML_FILE)) {
-    console.error("❌ Arquivo não encontrado!");
+    console.error(
+      "❌ Arquivo aa_660_final2.html não encontrado na pasta backend!"
+    );
     return;
   }
 
   const htmlContent = fs.readFileSync(HTML_FILE, "utf-8");
 
-  // Extrai JS do HTML (Mesma lógica segura da versão anterior)
+  // Extrai o conteúdo entre as tags <script>
   const scriptMatch = htmlContent.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-  if (!scriptMatch) return;
+
+  if (!scriptMatch) {
+    console.error("❌ Nenhuma tag <script> encontrada no HTML.");
+    return;
+  }
 
   let scriptContent = scriptMatch[1];
+
+  // Limpa código de DOM que quebra no Node.js
   if (scriptContent.includes("const quizArea")) {
     scriptContent = scriptContent.split("const quizArea")[0];
   }
+
+  // Truque para exportar as variáveis do script
   scriptContent += `
     this.baseQuestions = baseQuestions;
     this.signImages = signImages;
@@ -214,38 +187,39 @@ async function importQuestions() {
 
   const sandbox = {};
   vm.createContext(sandbox);
+
   try {
     vm.runInContext(scriptContent, sandbox);
   } catch (e) {
-    console.error("❌ Erro JS:", e.message);
+    console.error("❌ Erro ao processar o JavaScript do arquivo:", e.message);
     return;
   }
 
   const questionsRaw = sandbox.baseQuestions || [];
   const imagesMap = sandbox.signImages || {};
 
-  console.log(`🧩 Processando ${questionsRaw.length} questões com Subtemas...`);
+  console.log(
+    `🧩 Encontradas ${questionsRaw.length} questões. Iniciando importação...`
+  );
 
   let count = 0;
 
   for (const q of questionsRaw) {
     const text = q.text.toLowerCase();
 
-    // Lógica Inteligente: Define Tópico e Subtópico baseado no texto
-    let topicId = 1; // Default: Legislação
-    let subtopicId = null; // Default: null
+    // Tenta identificar o Subtema
+    let topicId = 1;
+    let subtopicId = null;
 
-    // Tenta encontrar um subtema que bata com as palavras-chave
     for (const rule of SUBTOPIC_RULES) {
-      const match = rule.keywords.some((k) => text.includes(k));
-      if (match) {
+      if (rule.keywords.some((k) => text.includes(k))) {
         topicId = rule.topic_id;
         subtopicId = rule.id;
-        break; // Achou o primeiro match, para.
+        break;
       }
     }
 
-    // Se não achou subtema, mas é de um tema geral, ajusta o tema principal
+    // Se não achou subtema, tenta ao menos acertar o tema principal
     if (!subtopicId) {
       if (text.includes("defensiva")) topicId = 2;
       else if (text.includes("mecânica")) topicId = 3;
@@ -254,7 +228,7 @@ async function importQuestions() {
       else if (text.includes("cidadania")) topicId = 6;
     }
 
-    // Recupera Imagem
+    // Recupera a URL da imagem se houver código da placa
     let imageUrl = null;
     if (q.code) {
       const codes = q.code.split(",").map((c) => c.trim());
@@ -268,17 +242,19 @@ async function importQuestions() {
 
     const { error } = await supabase.from("questions").insert({
       topic_id: topicId,
-      subtopic_id: subtopicId, // AGORA ESTAMOS PREENCHENDO ISSO!
+      subtopic_id: subtopicId, // Importante: agora preenchemos o subtema!
       question_text: q.text,
       options: q.options,
       correct_option: q.answer,
-      explanation: "Gabarito Oficial.",
+      explanation: "Gabarito Oficial Detran.",
       image_url: imageUrl,
     });
 
     if (!error) {
       count++;
       if (count % 50 === 0) process.stdout.write(`.`);
+    } else {
+      console.error(`Erro: ${error.message}`);
     }
   }
 

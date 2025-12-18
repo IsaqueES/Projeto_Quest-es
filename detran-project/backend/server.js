@@ -13,6 +13,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Middlewares
 app.use(cors());
 app.use(express.json());
 
@@ -26,12 +27,11 @@ app.get("/topics", async (req, res) => {
 // Rota 2: Pegar Subtópicos de um Tema
 app.get("/topics/:topicId/subtopics", async (req, res) => {
   const { topicId } = req.params;
-  // Busca subtópicos onde o topic_id bate com o solicitado
   const { data, error } = await supabase
     .from("subtopics")
     .select("*")
     .eq("topic_id", topicId)
-    .order("id"); // Adicionado ordem para ficar bonitinho
+    .order("id");
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -53,7 +53,7 @@ app.get("/questions", async (req, res) => {
 
     if (progressError) throw progressError;
 
-    // AQUI ESTAVA O ERRO: Se progress for null, usa array vazio []
+    // CORREÇÃO PRINCIPAL: Garante que é um array antes de fazer o map
     const answeredIds = (progress || []).map((p) => p.question_id);
 
     // 2. Montar query das questões
@@ -76,7 +76,7 @@ app.get("/questions", async (req, res) => {
 
     res.json(questions);
   } catch (err) {
-    console.error("Erro ao buscar questões:", err); // Log para ajudar no debug
+    console.error("Erro na rota /questions:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -90,17 +90,12 @@ app.get("/stats", async (req, res) => {
     .select("is_correct, question_id, questions!inner(topic_id, subtopic_id)")
     .eq("user_id", user_id);
 
-  if (subtopic_id) {
-    query = query.eq("questions.subtopic_id", subtopic_id);
-  } else if (topic_id) {
-    query = query.eq("questions.topic_id", topic_id);
-  }
+  if (subtopic_id) query = query.eq("questions.subtopic_id", subtopic_id);
+  else if (topic_id) query = query.eq("questions.topic_id", topic_id);
 
   const { data, error } = await query;
-
   if (error) return res.status(500).json({ error: error.message });
 
-  // Proteção contra data null
   const safeData = data || [];
   const correct = safeData.filter((d) => d.is_correct).length;
   const wrong = safeData.filter((d) => !d.is_correct).length;
@@ -111,7 +106,6 @@ app.get("/stats", async (req, res) => {
 // Rota 5: Salvar Resposta
 app.post("/submit", async (req, res) => {
   const { user_id, question_id, is_correct } = req.body;
-
   const { error } = await supabase
     .from("user_progress")
     .insert({ user_id, question_id, is_correct });
@@ -120,6 +114,7 @@ app.post("/submit", async (req, res) => {
   res.json({ status: "success" });
 });
 
+// Iniciar Servidor
 app.listen(PORT, () => {
   console.log(`✅ Servidor rodando em http://localhost:${PORT}`);
 });
